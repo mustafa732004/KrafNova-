@@ -31,7 +31,8 @@ message -> intent -> images -> vectorize -> explain
    retry with the error fed back; after that the API returns 422. This schema
    is the boundary: only a validated intent reaches the deterministic steps.
 2. **images** (`nodes/image_gen.py`): candidate rasters. `IMAGE_PROVIDER=gemini`
-   calls a real image model and saves PNGs under `generated/` (served at
+   calls a real image model (needs a billed key), `IMAGE_PROVIDER=pollinations`
+   uses the free, keyless pollinations.ai endpoint, and both save PNGs under `generated/` (served at
    `/generated`); `stub` returns placeholders so development works offline.
 3. **vectorize** (`nodes/vectorize.py`): deterministic, no AI. A rule-based
    threshold + rect-merge tracer turns each raster into an SVG. Same input,
@@ -50,7 +51,7 @@ app/schemas/design_intent.py Pydantic schemas: the LLM -> deterministic boundary
 app/agent/state.py           graph state
 app/agent/graph.py           LangGraph wiring
 app/agent/nodes/intent.py    message -> validated DesignIntent (Gemini)
-app/agent/nodes/image_gen.py image candidates (stub | Gemini image model)
+app/agent/nodes/image_gen.py image candidates (stub | Gemini | Pollinations)
 app/agent/nodes/vectorize.py deterministic raster -> SVG (rule-based tracer)
 app/agent/nodes/explain.py   plain-language explainer (Gemini, template fallback)
 ```
