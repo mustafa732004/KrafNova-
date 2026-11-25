@@ -22,9 +22,15 @@ class Settings:
     gemini_model: str = os.getenv("GEMINI_MODEL", "gemini-3.5-flash-lite")
 
     # Image generation. "stub" (default) returns placeholder candidates and
-    # needs no key; "gemini" calls a real image model.
+    # needs no key; "gemini" calls a real image model; "pollinations" is
+    # free and needs no key.
     image_provider: str = os.getenv("IMAGE_PROVIDER", "stub")
     image_model: str = os.getenv("IMAGE_MODEL", "gemini-2.5-flash-image")
+    # "pollinations" provider: free, no key. Model names: flux, turbo, ...
+    pollinations_model: str = os.getenv("POLLINATIONS_MODEL", "flux")
+    pollinations_base_url: str = os.getenv(
+        "POLLINATIONS_BASE_URL", "https://image.pollinations.ai/prompt"
+    )
     image_candidates: int = int(os.getenv("IMAGE_CANDIDATES", "3"))
 
     # Where generated rasters are saved (also served at /generated).
