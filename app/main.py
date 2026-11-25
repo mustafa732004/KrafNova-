@@ -1,9 +1,16 @@
+import os
+
 from fastapi import FastAPI, HTTPException
+from fastapi.staticfiles import StaticFiles
 
 from app.agent.graph import graph
+from app.config import settings
 from app.schemas.design_intent import DesignResponse, UserRequest
 
 app = FastAPI(title="KrafNova AI service")
+
+os.makedirs(settings.generated_dir, exist_ok=True)
+app.mount("/generated", StaticFiles(directory=settings.generated_dir), name="generated")
 
 
 @app.get("/health")
