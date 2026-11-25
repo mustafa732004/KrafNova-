@@ -11,8 +11,8 @@ from pydantic import BaseModel, Field
 class Dimensions(BaseModel):
     """Physical size of the final piece, in millimeters."""
 
-    width_mm: float = Field(gt=0, le=2000)
-    height_mm: float = Field(gt=0, le=2000)
+    width_mm: float = Field(ge=1, le=2000)
+    height_mm: float = Field(ge=1, le=2000)
 
 
 class DesignIntent(BaseModel):
