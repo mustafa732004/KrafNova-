@@ -30,14 +30,25 @@ message -> intent -> images -> vectorize -> explain
    `DesignIntent` Pydantic schema. On validation failure the model gets one
    retry with the error fed back; after that the API returns 422. This schema
    is the boundary: only a validated intent reaches the deterministic steps.
-2. **images** (`nodes/image_gen.py`): candidate rasters. `IMAGE_PROVIDER=gemini`
-   calls a real image model (needs a billed key), `IMAGE_PROVIDER=pollinations`
-   uses the free, keyless pollinations.ai endpoint, and both save PNGs under `generated/` (served at
-   `/generated`); `stub` returns placeholders so development works offline.
-3. **vectorize** (`nodes/vectorize.py`): deterministic, no AI. A rule-based
-   threshold + rect-merge tracer turns each raster into an SVG. Same input,
-   same SVG, every time. Swap `trace_to_svg` for potrace/vtracer later
-   without touching the graph.
+2. **images** (`nodes/image_gen.py`): candidate rasters. Providers:
+   `IMAGE_PROVIDER=horde` (AI Horde / stablehorde.net, free, anonymous by
+   default) is the recommended free option - it is the only free provider
+   here with negative-prompt support, so the output is actual line art
+   (thin black outlines on white) that traces cleanly for CNC. Anonymous
+   jobs sit in a public queue, so expect roughly 1-5 minutes per batch.
+   `IMAGE_PROVIDER=gemini` calls a real image model (needs a billed key),
+   `IMAGE_PROVIDER=pollinations` uses the free, keyless pollinations.ai
+   endpoint (fast, but its free tier ignores negative prompts and tends to
+   return shaded renders that trace into blobs), and `stub` returns
+   placeholders so development works offline. Real providers save PNGs
+   under `generated/` (served at `/generated`).
+3. **vectorize** (`nodes/vectorize.py`): deterministic, no AI. Two backends
+   behind `VECTOR_BACKEND`: `vtracer` (default when the package is
+   installed) preprocesses each raster (grayscale, autocontrast, Otsu
+   binarization, small bottom-edge crop to cut provider watermark strips)
+   and traces it into smooth bezier paths - CNC-usable line art instead of
+   blocky pixels. `rects` is the original dependency-free threshold +
+   rect-merge tracer, kept as a fallback. Same input, same SVG, every time.
 4. **explain** (`nodes/explain.py`): Gemini writes 2-4 plain sentences about
    what was made and why (thesis: explanation-quality evaluation). Falls back
    to a deterministic template without a key.
@@ -51,8 +62,8 @@ app/schemas/design_intent.py Pydantic schemas: the LLM -> deterministic boundary
 app/agent/state.py           graph state
 app/agent/graph.py           LangGraph wiring
 app/agent/nodes/intent.py    message -> validated DesignIntent (Gemini)
-app/agent/nodes/image_gen.py image candidates (stub | Gemini | Pollinations)
-app/agent/nodes/vectorize.py deterministic raster -> SVG (rule-based tracer)
+app/agent/nodes/image_gen.py image candidates (stub | Gemini | Pollinations | Horde)
+app/agent/nodes/vectorize.py deterministic raster -> SVG (vtracer curves, rects fallback)
 app/agent/nodes/explain.py   plain-language explainer (Gemini, template fallback)
 ```
 
