@@ -1,12 +1,18 @@
 """Node 2: generate candidate images from the validated intent.
 
-Three providers behind settings.image_provider:
+Providers behind settings.image_provider:
   - "stub" (default): placeholder candidates, no key needed, so the graph
     runs end to end in development.
   - "gemini": real image model via the google-genai SDK. Rasters are saved
     under settings.generated_dir and served at /generated.
   - "pollinations": free, no API key, pollinations.ai image endpoint.
     Same output as gemini (PNG files under generated_dir).
+  - "horde": AI Horde, free, with negative-prompt support.
+  - "gemini-svg": the Gemini TEXT model writes the SVG directly - no
+    raster, no tracing step. Free with the same GEMINI_API_KEY, seconds
+    instead of minutes, and the output is already clean vector line art.
+    SVGs are saved under settings.generated_dir and served at /generated;
+    the vectorize node passes them through untouched.
 
 TODO: persist candidates per request id instead of unique files forever,
 and add a cleanup job.
@@ -22,6 +28,7 @@ import urllib.error
 import urllib.parse
 import urllib.request
 import uuid
+import xml.etree.ElementTree as ET
 
 from PIL import Image
 from google import genai
@@ -266,6 +273,115 @@ def _pollinations_candidates(intent: DesignIntent) -> list[Candidate]:
     return candidates
 
 
+# Direct text-to-SVG: the text model writes the ornament as vector code.
+# The system prompt is what keeps the output CNC-usable: finished ornament
+# (not construction lines), stroke-only black on white, symmetric, and the
+# viewBox matched to the physical dimensions in millimeters.
+_SVG_SYSTEM = (
+    "You are an expert ornamental SVG designer for CNC wood engraving. "
+    "Output ONLY a complete, valid, standalone SVG document: no markdown, "
+    "no explanation, no code fences. "
+    "This is a FINISHED DECORATIVE ORNAMENT, not drafting construction "
+    "lines: every path must be part of the final motif. "
+    "Rules: white background rect; artwork only in black strokes "
+    "(stroke='black', fill='none') or solid black fills for the motif; "
+    "perfectly symmetric, centered composition; nothing clipped or "
+    "overshooting outside the design; stroke-width between 0.4 and 1; "
+    "use grouped, rotated copies (<g transform='rotate(...)') to "
+    "guarantee symmetry."
+)
+
+
+def _svg_prompt(intent: DesignIntent, i: int) -> str:
+    subject = _english_subject(intent.subject)
+    w = intent.dimensions.width_mm
+    h = intent.dimensions.height_mm
+    return (
+        f"minimalist black and white line art of {subject}, {intent.style} "
+        f"style. viewBox='0 0 {w:g} {h:g}' (millimeters)."
+        + (f" Note: {intent.notes}" if intent.notes and intent.notes.isascii() else "")
+        + f" Design variation {i}."
+    )
+
+
+def _call_svg_llm(prompt: str) -> str:
+    response = _get_client().models.generate_content(
+        model=settings.gemini_model,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=_SVG_SYSTEM, temperature=0.7
+        ),
+    )
+    return response.text or ""
+
+
+def _extract_svg(text: str) -> str | None:
+    """Pull the <svg>...</svg> document out of the model's reply and check
+    it is well-formed XML rooted at <svg>. Same validation-boundary idea as
+    the intent node: model output is never trusted blindly."""
+    m = re.search(r"<svg[\s\S]*</svg>", text)
+    if not m:
+        return None
+    svg = m.group(0)
+    try:
+        root = ET.fromstring(svg)
+    except ET.ParseError:
+        return None
+    if not root.tag.endswith("svg"):
+        return None
+    return svg
+
+
+def _normalize_svg(svg: str, width_mm: float, height_mm: float) -> str:
+    """Force the physical size onto the model's SVG: width/height in mm,
+    an xmlns, and a viewBox if the model forgot one."""
+    m = re.match(r"\s*<svg([^>]*)>", svg)
+    if not m:
+        return svg
+    attrs = re.sub(r'\s(?:width|height)="[^"]*"', "", m.group(1))
+    if "xmlns=" not in attrs:
+        attrs = ' xmlns="http://www.w3.org/2000/svg"' + attrs
+    if "viewBox=" not in attrs:
+        attrs += f' viewBox="0 0 {width_mm:g} {height_mm:g}"'
+    head = f'<svg width="{width_mm:g}mm" height="{height_mm:g}mm"{attrs}>'
+    return head + svg[m.end():]
+
+
+def _gemini_svg_candidates(intent: DesignIntent) -> list[Candidate]:
+    """Gemini writes each candidate as SVG code directly. One retry per
+    candidate when the reply is not a parseable SVG document."""
+    os.makedirs(settings.generated_dir, exist_ok=True)
+    batch = uuid.uuid4().hex[:8]
+    w = intent.dimensions.width_mm
+    h = intent.dimensions.height_mm
+    candidates: list[Candidate] = []
+    for i in range(1, settings.image_candidates + 1):
+        try:
+            svg = _extract_svg(_call_svg_llm(_svg_prompt(intent, i)))
+            if svg is None:
+                svg = _extract_svg(
+                    _call_svg_llm(
+                        _svg_prompt(intent, i)
+                        + " Return ONLY the SVG document, nothing else."
+                    )
+                )
+        except Exception as exc:
+            log.warning("gemini-svg candidate %s failed: %s", i, exc)
+            continue
+        if svg is None:
+            log.warning("gemini-svg candidate %s returned no valid SVG, skipping", i)
+            continue
+        svg = _normalize_svg(svg, w, h)
+        filename = f"{batch}-cand-{i}.svg"
+        path = os.path.join(settings.generated_dir, filename)
+        with open(path, "w", encoding="utf-8") as fh:
+            fh.write(svg)
+        candidates.append(
+            Candidate(id=f"cand-{i}", image_url=f"/generated/{filename}", svg=svg)
+        )
+    return candidates
+
+
 def generate_images(state: dict) -> dict:
     intent = state["intent"]
     if settings.image_provider == "gemini":
@@ -274,4 +390,6 @@ def generate_images(state: dict) -> dict:
         return {"candidates": _pollinations_candidates(intent)}
     if settings.image_provider == "horde":
         return {"candidates": _horde_candidates(intent)}
+    if settings.image_provider == "gemini-svg":
+        return {"candidates": _gemini_svg_candidates(intent)}
     return {"candidates": _stub_candidates(intent)}
