@@ -15,6 +15,22 @@ uvicorn app.main:app --reload
 
 Try it: `POST /design` with `{"message": "a cedar tree for a 10cm wood sign"}`.
 
+## Run it programmatically
+
+`examples/run_design.py` shows the whole flow from code, no curl or manual
+server needed: it boots `uvicorn app.main:app` in a subprocess, waits for
+`/health`, POSTs an Arabic prompt to `/design`, prints the validated intent
+and the candidate URLs, saves the chosen SVG to `examples/output/`, prints
+the explainer text, and shuts the server down.
+
+```
+python examples/run_design.py
+```
+
+It honors `.env`, so with `IMAGE_PROVIDER=gemini-svg` and a free
+`GEMINI_API_KEY` the run takes seconds and the saved SVG is vector-native
+(no tracing step).
+
 Without a key the app still runs: set `IMAGE_PROVIDER=stub` (default) and the
 explainer falls back to a template, but the intent node needs a real
 `GEMINI_API_KEY`.
