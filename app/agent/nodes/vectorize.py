@@ -12,6 +12,8 @@ Backends (settings.vector_backend):
     to pure black/white, merge equal horizontal runs on adjacent rows into
     rectangles). Kept as a dependency-free fallback.
 
+Candidates that already carry vector art (the gemini-svg image provider
+writes SVG directly) pass through untouched - there is no raster to trace.
 Candidates without a real raster (stub image provider) keep a placeholder
 SVG with the intent's dimensions, exactly like before.
 """
@@ -205,6 +207,9 @@ def vectorize(state: dict) -> dict:
                 intent.dimensions.width_mm,
                 intent.dimensions.height_mm,
             )
+        elif cand.svg:
+            # Vector-native candidate (gemini-svg provider): nothing to trace.
+            svg = cand.svg
         else:
             svg = _placeholder_svg(intent)
         out.append(cand.model_copy(update={"svg": svg}))
