@@ -80,6 +80,51 @@ def test_full_workflow_422():
     print("ok  workflow: /design returns 422 when intent never validates")
 
 
+GOOD_SVG = (
+    '<svg viewBox="0 0 100 100"><rect width="100" height="100" fill="white"/>'
+    '<path d="M50 10 L90 90 L10 90 Z" stroke="black" fill="none"/></svg>'
+)
+
+
+def test_full_workflow_gemini_svg_provider():
+    """gemini-svg: the text model's SVG passes through vectorize untouched."""
+    from app.agent.nodes import image_gen
+    from app.config import settings
+
+    intent_node._call_llm = fake_llm([VALID_JSON])
+    image_gen._call_svg_llm = lambda prompt: "```svg\n" + GOOD_SVG + "\n```"
+    old_provider = settings.image_provider
+    settings.image_provider = "gemini-svg"
+    try:
+        client = TestClient(app)
+        res = client.post("/design", json={"message": "a cedar tree for a 10cm sign"})
+        assert res.status_code == 200, res.text
+        body = res.json()
+        assert len(body["candidates"]) == 3
+        for c in body["candidates"]:
+            assert c["svg"].startswith("<svg"), c["svg"][:80]
+            assert 'width="100mm"' in c["svg"] and "mm" in c["svg"]
+            assert 'xmlns="http://www.w3.org/2000/svg"' in c["svg"]
+            assert "<path" in c["svg"]  # model's artwork kept, not a placeholder
+            assert c["image_url"].endswith(".svg")
+    finally:
+        settings.image_provider = old_provider
+    print("ok  workflow: gemini-svg provider returns normalized model SVGs")
+
+
+def test_extract_svg_rejects_garbage():
+    from app.agent.nodes.image_gen import _extract_svg, _normalize_svg
+
+    assert _extract_svg("no svg here") is None
+    assert _extract_svg("<svg><broken") is None
+    svg = _extract_svg("sure! " + GOOD_SVG + " hope that helps")
+    assert svg is not None and svg.startswith("<svg")
+    out = _normalize_svg(svg, 100.0, 80.0)
+    assert 'width="100mm"' in out and 'height="80mm"' in out
+    assert 'viewBox="0 0 100 100"' in out  # model's own viewBox preserved
+    print("ok  gemini-svg: extraction rejects garbage, normalize sets mm size")
+
+
 def test_tracer_is_deterministic(tmp_path="."):
     path = os.path.join(tmp_path, "_test_raster.png")
     img = Image.new("L", (32, 32), color=255)
@@ -102,6 +147,8 @@ if __name__ == "__main__":
     test_intent_retry_then_success()
     test_intent_gives_up_after_retry()
     test_full_workflow_stub_images()
+    test_full_workflow_gemini_svg_provider()
+    test_extract_svg_rejects_garbage()
     test_full_workflow_422()
     test_tracer_is_deterministic()
     print("\nAll tests passed.")
