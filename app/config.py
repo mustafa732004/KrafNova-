@@ -23,7 +23,8 @@ class Settings:
 
     # Image generation. "stub" (default) returns placeholder candidates and
     # needs no key; "gemini" calls a real image model; "pollinations" is
-    # free and needs no key.
+    # free and needs no key; "horde" is AI Horde, free, with negative-prompt
+    # support for clean line-art output.
     image_provider: str = os.getenv("IMAGE_PROVIDER", "stub")
     image_model: str = os.getenv("IMAGE_MODEL", "gemini-2.5-flash-image")
     # "pollinations" provider: free, no key. Model names: flux, turbo, ...
@@ -31,6 +32,12 @@ class Settings:
     pollinations_base_url: str = os.getenv(
         "POLLINATIONS_BASE_URL", "https://image.pollinations.ai/prompt"
     )
+    # "horde" provider: AI Horde (stablehorde.net), free; the default key is
+    # the anonymous one. Only free provider with negative-prompt support.
+    horde_api_key: str = os.getenv("HORDE_API_KEY", "0000000000")
+    horde_base_url: str = os.getenv("HORDE_BASE_URL", "https://stablehorde.net/api/v2")
+    horde_model: str = os.getenv("HORDE_MODEL", "SDXL 1.0")
+    horde_timeout: int = int(os.getenv("HORDE_TIMEOUT", "600"))
     image_candidates: int = int(os.getenv("IMAGE_CANDIDATES", "3"))
 
     # Where generated rasters are saved (also served at /generated).
@@ -41,6 +48,13 @@ class Settings:
 
     # Vectorization: max raster side in px before tracing (keeps SVGs small).
     vector_max_px: int = int(os.getenv("VECTOR_MAX_PX", "512"))
+    # Tracer backend: "vtracer" (smooth curves, needs the vtracer package,
+    # falls back to rects when missing) or "rects" (dependency-free blocks).
+    vector_backend: str = os.getenv("VECTOR_BACKEND", "vtracer")
+    # vtracer: speckle filter in px (drops tiny blobs), and the fraction of
+    # the bottom edge cropped before tracing to cut provider watermarks.
+    vector_filter_speckle: int = int(os.getenv("VECTOR_FILTER_SPECKLE", "16"))
+    vector_watermark_crop: float = float(os.getenv("VECTOR_WATERMARK_CROP", "0.06"))
 
 
 settings = Settings()
