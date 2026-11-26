@@ -42,7 +42,15 @@ message -> intent -> images -> vectorize -> explain
    return shaded renders that trace into blobs), and `stub` returns
    placeholders so development works offline. Real providers save PNGs
    under `generated/` (served at `/generated`).
-3. **vectorize** (`nodes/vectorize.py`): deterministic, no AI. Two backends
+   `IMAGE_PROVIDER=gemini-svg` skips raster generation entirely: the
+   Gemini text model (same free `GEMINI_API_KEY`, `GEMINI_MODEL`) writes
+   each candidate as SVG code directly - symmetric, stroke-only line art
+   sized in millimeters, ready in seconds instead of minutes, with no
+   tracing artifacts. SVGs are saved under `generated/` too and the
+   vectorize step passes them through unchanged.
+3. **vectorize** (`nodes/vectorize.py`): deterministic, no AI. Candidates
+   that are already vector-native (gemini-svg) pass through untouched; for
+   raster candidates two backends
    behind `VECTOR_BACKEND`: `vtracer` (default when the package is
    installed) preprocesses each raster (grayscale, autocontrast, Otsu
    binarization, small bottom-edge crop to cut provider watermark strips)
