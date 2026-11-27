@@ -1,0 +1,15 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+pydantic>=2.6
+langgraph>=0.2
+google-genai>=1.0
+Pillow>=10.0
+python-dotenv>=1.0
+
+# Smooth bezier tracing for CNC line art (optional; the vectorizer
+# falls back to the rect tracer when missing).
+vtracer>=0.6
+numpy>=1.24
+
+# DXF output for the gemini-dxf CAD provider.
+ezdxf>=1.1
