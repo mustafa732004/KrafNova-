@@ -10,3 +10,6 @@ python-dotenv>=1.0
 # falls back to the rect tracer when missing).
 vtracer>=0.6
 numpy>=1.24
+
+# DXF output for the gemini-dxf CAD provider.
+ezdxf>=1.1
