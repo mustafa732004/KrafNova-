@@ -315,6 +315,19 @@ def _call_svg_llm(prompt: str) -> str:
     return response.text or ""
 
 
+def _call_cad_llm(system: str, prompt: str) -> str:
+    response = _get_client().models.generate_content(
+        model=settings.gemini_model,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=system,
+            temperature=0.9,
+            response_mime_type="application/json",
+        ),
+    )
+    return response.text or ""
+
+
 def _extract_svg(text: str) -> str | None:
     """Pull the <svg>...</svg> document out of the model's reply and check
     it is well-formed XML rooted at <svg>. Same validation-boundary idea as
@@ -384,6 +397,10 @@ def _gemini_svg_candidates(intent: DesignIntent) -> list[Candidate]:
 
 def generate_images(state: dict) -> dict:
     intent = state["intent"]
+    if settings.image_provider == "gemini-dxf":
+        from app.agent.nodes.cad_dxf import gemini_dxf_candidates
+
+        return {"candidates": gemini_dxf_candidates(intent, _call_cad_llm, _english_subject)}
     if settings.image_provider == "gemini":
         return {"candidates": _gemini_candidates(intent)}
     if settings.image_provider == "pollinations":
